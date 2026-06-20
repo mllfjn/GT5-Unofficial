@@ -710,7 +710,7 @@ public abstract class MTEMultiBlockBase extends MetaTileEntity
         recipeCheckImmediately = true;
     }
 
-    private boolean shouldCheckRecipeThisTick(long aTick) {
+    protected boolean shouldCheckRecipeThisTick() {
         // do a recipe check if any smart hatch just got pushed in items
         if (recipeCheckImmediately) {
             recipeCheckImmediately = false;
@@ -808,7 +808,7 @@ public abstract class MTEMultiBlockBase extends MetaTileEntity
             // Check if the machine is enabled in the first place!
             if (aBaseMetaTileEntity.isAllowedToWork()) {
 
-                if (shouldCheckRecipeThisTick(aTick) || aBaseMetaTileEntity.hasWorkJustBeenEnabled()
+                if (shouldCheckRecipeThisTick() || aBaseMetaTileEntity.hasWorkJustBeenEnabled()
                     || aBaseMetaTileEntity.hasInventoryBeenModified()) {
                     if (checkRecipe()) {
                         markDirty();

@@ -201,6 +201,9 @@ public class MTEAdvAssLine extends MTEExtendedPowerMultiBlockBase<MTEAdvAssLine>
     private String lastStopReason = "";
     private int currentRecipeParallel = 1;
 
+    private boolean forceContinuousMode = true;
+    private boolean missingMaterial;
+
     public MTEAdvAssLine(int aID, String aName, String aNameRegional) {
         super(aID, aName, aNameRegional);
     }
@@ -593,10 +596,31 @@ public class MTEAdvAssLine extends MTEExtendedPowerMultiBlockBase<MTEAdvAssLine>
 
     @Override
     public boolean onRunningTick(ItemStack aStack) {
+        if ((forceContinuousMode && missingMaterial || stuck)
+            && !shouldCheckRecipeThisTick()
+        ) {
+            return false;
+        }
+
+        if (forceContinuousMode && missingMaterial) {
+            startRecipeProcessing();
+            if (!checkMaterial()) {
+                endRecipeProcessing();
+                return false;
+            }
+        } else {
+            for (int i = slices.length - 1; i >= 0; i--) {
+                slices[i].tick();
+            }
+        }
+
+        stuck = false;
+
         if (currentRecipe == null) {
             criticalStopMachine("ggfab.gui.advassline.shutdown.recipe_null");
             return false;
         }
+
         for (MTEHatchDataAccess hatch_dataAccess : mDataAccessHatches) {
             hatch_dataAccess.setActive(true);
         }
@@ -605,36 +629,34 @@ public class MTEAdvAssLine extends MTEExtendedPowerMultiBlockBase<MTEAdvAssLine>
             criticalStopMachine("ggfab.gui.advassline.shutdown.input_buses");
             return false;
         }
-        boolean oStuck = stuck;
-        stuck = false;
 
+        boolean foundWorking = false;
+        int working = 0;
         for (int i = slices.length - 1; i >= 0; i--) {
-            slices[i].tick();
+            Slice slice = slices[i];
+            if (slice.progress >= 0) {
+                if (!foundWorking) {
+                    foundWorking = true;
+                    mProgresstime = (slice.id + 1) * (mMaxProgresstime / currentInputLength) - slice.progress - 1;
+                }
+            }
+            if (slice.progress > 0) working++;
         }
 
         if (getBaseMetaTileEntity().isAllowedToWork() && slices[0].progress < 0) {
             startRecipeProcessing();
-            if (hasAllItems(currentRecipe, this.currentRecipeParallel)
-                && hasAllFluids(currentRecipe, this.currentRecipeParallel)
-                && slices[0].start()) {
+            if (checkMaterial() && slices[0].start()) {
+                missingMaterial = false;
                 drainAllFluids(currentRecipe, this.currentRecipeParallel);
-                mProgresstime = 0;
+                working++;
+            } else if (forceContinuousMode && working > 0) {
+                missingMaterial = true;
+                stuck = true;
             }
         }
 
         endRecipeProcessing();
 
-        boolean foundWorking = false;
-        int working = 0;
-        for (Slice slice : slices) {
-            if (slice.progress >= 0) {
-                if (!foundWorking) {
-                    foundWorking = true;
-                    mProgresstime = (slice.id + 1) * (mMaxProgresstime / currentInputLength) - slice.progress;
-                }
-            }
-            if (slice.progress > 0) working++;
-        }
         lEUt = working * baseEUt;
 
         if (lEUt > 0) {
@@ -651,6 +673,11 @@ public class MTEAdvAssLine extends MTEExtendedPowerMultiBlockBase<MTEAdvAssLine>
         }
 
         return true;
+    }
+
+    private boolean checkMaterial() {
+        return hasAllItems(currentRecipe, this.currentRecipeParallel)
+            && hasAllFluids(currentRecipe, this.currentRecipeParallel);
     }
 
     private ItemStack getInputBusContent(int index) {
